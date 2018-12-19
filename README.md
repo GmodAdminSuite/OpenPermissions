@@ -1,3 +1,5 @@
+![Screenshot](https://i.imgur.com/O4jvgIa.png)
+
 # OpenPermissions
 
 OpenPermissions is an open-source library and utility for smoothly, efficiently and easily managing permissions in your GLua addons.
