@@ -54,17 +54,22 @@ hook.Add("PlayerSay", "openpermissions_chat_command", function(ply, txt)
 	end
 end)
 
+local function BroadcastPermissionsRegistry()
+	net.Start("OpenPermissions.PermissionsRegistry")
+		OpenPermissions:StartNetworkTable(OpenPermissions.PermissionsRegistry, true, true)
+		OpenPermissions:StartNetworkTable(OpenPermissions.DefaultPermissions, true, true)
+	net.Broadcast()
+end
+
 local OP_TREE_ITEM = {}
 function OP_TREE_ITEM:Init()
 	self.Items = {}
-	if (self.Options.Default) then
+	if (self.Options.Default ~= nil) then
 		OpenPermissions.DefaultPermissions[self:GetID()] = self.Options.Default
 	end
 	if (OpenPermissions_Readying ~= true) then
-		net.Start("OpenPermissions.PermissionsRegistry")
-			OpenPermissions:StartNetworkTable(OpenPermissions.PermissionsRegistry, true, true)
-			OpenPermissions:StartNetworkTable(OpenPermissions.DefaultPermissions, true, true)
-		net.Broadcast()
+		timer.Remove("OpenPermissions:BroadcastPermissionsRegistry")
+		timer.Create("OpenPermissions:BroadcastPermissionsRegistry", 4, 1, BroadcastPermissionsRegistry)
 	end
 end
 function OP_TREE_ITEM:GetTree()
@@ -142,6 +147,5 @@ function OpenPermissions:RegisterAddon(id, options)
 end
 
 OpenPermissions_Ready = true
-OpenPermissions_Readying = true
 hook.Run("OpenPermissions:Ready")
 OpenPermissions_Readying = nil

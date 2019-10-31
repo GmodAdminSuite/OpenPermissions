@@ -227,9 +227,44 @@ function OpenPermissions:OpenMenu(specific_addon)
 
 					function CopyPermissions:DoClick()
 						PastePermissions:SetDisabled(false)
+						PastePermissions.PermissionsData = {}
+						local copied_clashes = false
+						for _,line in ipairs(AccessGroups:GetSelected()) do
+							local identifier = line.Data.Enum .. " " .. line.Data.Value
+							if (not OpenPermissions.PermissionsRegistryEditing[identifier]) then continue end
+							for permission_id, checked in pairs(OpenPermissions.PermissionsRegistryEditing[identifier]) do
+								if (PastePermissions.PermissionsData[permission_id] == nil) then
+									local has_clashed = false
+									for _,line_2 in ipairs(AccessGroups:GetSelected()) do
+										local identifier_2 = line_2.Data.Enum .. " " .. line_2.Data.Value
+										if (not OpenPermissions.PermissionsRegistryEditing[identifier_2]) then continue end
+										if (identifier_2 == identifier) then continue end
+										if (OpenPermissions.PermissionsRegistryEditing[identifier_2][permission_id] ~= checked) then
+											copied_clashes, has_clashed = true, true
+											break
+										end
+									end
+									if (not has_clashed) then
+										PastePermissions.PermissionsData[permission_id] = checked
+									else
+										PastePermissions.PermissionsData[permission_id] = nil
+									end
+								elseif (PastePermissions.PermissionsData[permission_id] ~= checked) then
+									copied_clashes = true
+									PastePermissions.PermissionsData[permission_id] = nil
+								end
+							end
+						end
+						if (copied_clashes) then
+							Derma_Message(L"permission_clash_msg", "OpenPermissions", L"ok")
+						end
 					end
 					function PastePermissions:DoClick()
-
+						for _,line in ipairs(AccessGroups:GetSelected()) do
+							local identifier = line.Data.Enum .. " " .. line.Data.Value
+							OpenPermissions.PermissionsRegistryEditing[identifier] = OpenPermissions.PermissionsRegistryEditing[identifier] or {}
+							table.Merge(OpenPermissions.PermissionsRegistryEditing[identifier], PastePermissions.PermissionsData)
+						end
 					end
 
 					function CopyPasteContainer:PerformLayout(w,h)
@@ -257,7 +292,7 @@ function OpenPermissions:OpenMenu(specific_addon)
 					local is_disabled = true
 					for _,line in ipairs(AccessGroups:GetSelected()) do
 						local identifier = line.Data.Enum .. " " .. line.Data.Value
-						if (checked == OpenPermissions.CHECKBOX.NONE or checked == false) then
+						if (checked == OpenPermissions.CHECKBOX.INHERIT or checked == false) then
 							if (OpenPermissions.PermissionsRegistryEditing[identifier] ~= nil) then
 								OpenPermissions.PermissionsRegistryEditing[identifier][permission_id] = nil
 								if (OpenPermissions:table_IsEmpty(OpenPermissions.PermissionsRegistryEditing[identifier])) then
@@ -286,7 +321,7 @@ function OpenPermissions:OpenMenu(specific_addon)
 					local checked
 					for _,line in ipairs(AccessGroups:GetSelected()) do
 						local identifier = line.Data.Enum .. " " .. line.Data.Value
-						local should_be_checked = OpenPermissions.CHECKBOX.NONE
+						local should_be_checked = OpenPermissions.CHECKBOX.INHERIT
 						if (OpenPermissions.PermissionsRegistryEditing[identifier] ~= nil and OpenPermissions.PermissionsRegistryEditing[identifier][permission_id] ~= nil) then
 							should_be_checked = OpenPermissions.PermissionsRegistryEditing[identifier][permission_id]
 						elseif (OpenPermissions.DefaultPermissions[permission_id] ~= nil) then
@@ -398,6 +433,13 @@ function OpenPermissions:OpenMenu(specific_addon)
 				end
 
 				KeyCategory:SetContents(KeyInfo)
+			
+			local MultipleTip = vgui.Create("DLabel", NavContent)
+			MultipleTip:Dock(TOP)
+			MultipleTip:SetContentAlignment(5)
+			MultipleTip:DockMargin(0,0,0,5)
+			MultipleTip:SetText(L"hold_ctrl_to_select_multiple")
+			MultipleTip:SetTextColor(OpenPermissions.COLOR_BLACK)
 
 			local AddAccessGroup = vgui.Create("DButton", NavContent)
 			AddAccessGroup:SetText(L"add_access_group")
@@ -520,15 +562,39 @@ function OpenPermissions:OpenMenu(specific_addon)
 
 				local ACCESS_GROUP_TEAM, _ = menu:AddSubMenu(L"ACCESS_GROUP_TEAM") _:SetIcon("icon16/flag_green.png")
 
-					local teams = {}
-					for i,t in pairs(team.GetAllTeams()) do
-						table.insert(teams, {Name = t.Name, Index = i, Color = t.Color})
-					end
-					table.SortByMember(teams, "Name", true)
-					for i,item in ipairs(teams) do
-						DMenuOption_ColorIcon(ACCESS_GROUP_TEAM:AddOption(item.Name, function()
-							AddAccessGroup:Add(OpenPermissions.ACCESS_GROUP.TEAM, item.Name, OpenPermissions:GetTeamIdentifier(i))
-						end), item.Color)
+					if (DarkRP) then
+						local categories = {}
+						for i,c in ipairs(DarkRP.getCategories().jobs) do
+							if (GAS:table_IsEmpty(c.members)) then continue end
+							table.insert(categories, {name = c.name, color = c.color, members = c.members})
+						end
+						table.SortByMember(categories, "name", true)
+						for i,c in ipairs(categories) do
+							local submenu, _submenu = ACCESS_GROUP_TEAM:AddSubMenu(c.name)
+							DMenuOption_ColorIcon(_submenu, c.color)
+
+							local members = {}
+							for _,member in ipairs(c.members) do
+								table.insert(members, {name = member.name, color = member.color, index = member.team})
+							end
+							table.SortByMember(members, "name", true)
+							for _,member in ipairs(members) do
+								DMenuOption_ColorIcon(submenu:AddOption(member.name, function()
+									AddAccessGroup:Add(OpenPermissions.ACCESS_GROUP.TEAM, member.name, OpenPermissions:GetTeamIdentifier(member.index))
+								end), member.color)
+							end
+						end
+					else
+						local teams = {}
+						for i,t in ipairs(team.GetAllTeams()) do
+							table.insert(teams, {Name = t.Name, Index = i, Color = t.Color})
+						end
+						table.SortByMember(teams, "Name", true)
+						for i,item in ipairs(teams) do
+							DMenuOption_ColorIcon(ACCESS_GROUP_TEAM:AddOption(item.Name, function()
+								AddAccessGroup:Add(OpenPermissions.ACCESS_GROUP.TEAM, item.Name, OpenPermissions:GetTeamIdentifier(i))
+							end), item.Color)
+						end
 					end
 
 				local ACCESS_GROUP_LUA_FUNCTION, _ = menu:AddSubMenu(L"ACCESS_GROUP_LUA_FUNCTION") _:SetIcon("icon16/script.png")
@@ -567,9 +633,10 @@ function OpenPermissions:OpenMenu(specific_addon)
 			PropertiesContent:Clear()
 
 			local indent_level = 0
-			local function _r(tbl, permission_id, my_parent)
+			local function _r(tbl, permission_id, my_parent, i)
+				i = (i or 0) + 1
 				local final_checkbox
-				for _,v in ipairs(tbl) do
+				for i,v in ipairs(tbl) do
 					local my_permission_id = permission_id
 					if (v[2].Value) then
 						my_permission_id = my_permission_id .. "/" .. v[2].Value
@@ -622,7 +689,7 @@ function OpenPermissions:OpenMenu(specific_addon)
 
 					if (#v[1] > 0) then
 						indent_level = indent_level + 1
-						_r(v[1], my_permission_id, v)
+						_r(v[1], my_permission_id, v, i)
 					end
 				end
 				if (final_checkbox) then
@@ -633,6 +700,8 @@ function OpenPermissions:OpenMenu(specific_addon)
 			_r(v[1], addon_id)
 		end
 		function PermissionsTab:LoadPermissions(addon_id, addon_data, shouldnt_clear)
+			PermissionsTab.AddonID, PermissionsTab.AddonData = addon_id, addon_data
+
 			if (not shouldnt_clear) then
 				PermissionsTree:Clear()
 				PropertiesContent:Clear()
@@ -808,9 +877,17 @@ function OpenPermissions:OpenMenu(specific_addon)
 		PermissionsSave:SetDisabled(false)
 	end
 
+	local sorted_addons = {}
+	for id, data in pairs(OpenPermissions.Addons) do
+		local options = data[2]
+		table.insert(sorted_addons, {name = options.Name or id, id = id, data = data})
+	end
+	table.SortByMember(sorted_addons, "name", true)
+
 	local AddonQueue = {}
 	local ActiveAddon
-	for id, data in pairs(OpenPermissions.Addons) do
+	for _,addon_data in ipairs(sorted_addons) do
+		local id, data = addon_data.id, addon_data.data
 		local options = data[2]
 		AddonSelect:AddChoice(options.Name or id, id, false, options.Icon)
 
@@ -903,7 +980,7 @@ end, function(cmd, args)
 end)
 
 net.Receive("OpenPermissions.NoPermissions", function()
-	OpenPermissions:Print(L"operator_only_menu", "[ERROR]", OpenPermissions.COLOR_RED)
+	OpenPermissions:ChatPrint(L"operator_only_menu", "[ERROR]", OpenPermissions.COLOR_RED)
 end)
 
 net.Receive("OpenPermissions.NotAnAddon", function()

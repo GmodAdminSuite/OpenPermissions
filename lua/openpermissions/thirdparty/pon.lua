@@ -38,7 +38,6 @@ THANKS TO...
 
 
 local pon = {};
-_G.pon = pon;
 
 local type, count = type, table.Count ;
 local tonumber = tonumber ;
@@ -407,3 +406,5 @@ do
 		return res;
 	end
 end
+
+return pon

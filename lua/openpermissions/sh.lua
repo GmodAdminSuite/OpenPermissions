@@ -1,11 +1,9 @@
-if (not pon) then
-	include("openpermissions/thirdparty/pon.lua")
-end
+OpenPermissions.pon = include("openpermissions/thirdparty/pon.lua")
 function OpenPermissions:SerializeTable(tbl)
-	return pon.encode(tbl)
+	return OpenPermissions.pon.encode(tbl)
 end
 function OpenPermissions:DeserializeTable(tbl)
-	return pon.decode(tbl)
+	return OpenPermissions.pon.decode(tbl)
 end
 
 local NetworkedTblCache = {}
@@ -39,7 +37,7 @@ end
 
 function OpenPermissions:SteamIDToAccountID(steamid)
 	local acc32 = tonumber(steamid:sub(11))
-	return (acc32 * 2) + (1 - (acc32 % 2))
+	return (acc32 * 2) + tonumber(steamid:sub(9,9))
 end
 
 function OpenPermissions:AccountIDToSteamID(account_id)
@@ -57,13 +55,35 @@ end
 
 --## Usergroup Management ##--
 
-function OpenPermissions:IsUserGroup(ply, usergroup)
-	return ply:IsUserGroup(usergroup) or hook.Run("OpenPermissions:IsUserGroup", ply, usergroup) or false
+function OpenPermissions:IsUserGroup(ply, ...)
+	local vararg = {...}
+	if (#vararg == 1) then
+		return ply:IsUserGroup(vararg[1]) or (not ply:IsBot() and hook.Run("OpenPermissions:IsUserGroup", ply, vararg[1]) == true) or false
+	else
+		for _,ug in ipairs(vararg) do
+			if (ply:IsUserGroup(ug) or (not ply:IsBot() and hook.Run("OpenPermissions:IsUserGroup", ply, ug) == true)) then
+				return true
+			end
+		end
+		return false
+	end
+end
+
+function OpenPermissions:IsUsergroups(ply, usergroups)
+	local ply_usergroups = OpenPermissions:GetUserGroups(ply)
+	for _,usergroup in ipairs(usergroups) do
+		if (ply_usergroups[usergroup]) then
+			return true
+		end
+	end
+	return false
 end
 
 function OpenPermissions:GetUserGroups(ply)
 	local usergroups_tbl = {[ply:GetUserGroup()] = true}
-	hook.Run("OpenPermissions:GetUserGroups", ply, usergroups_tbl)
+	if (not ply:IsBot()) then
+		hook.Run("OpenPermissions:GetUserGroups", ply, usergroups_tbl)
+	end
 	return usergroups_tbl
 end
 
@@ -81,10 +101,9 @@ for _,_s in ipairs(OpenPermissions.Operators.SteamIDs) do
 end
 
 function OpenPermissions:IsOperator(ply)
-	if (SERVER) then
-		if (OpenPermissions.IndexedOperators[ply:AccountID()]) then
-			return true
-		end
+	if (ply:IsBot()) then return false end
+	if (OpenPermissions.IndexedOperators[ply:AccountID()]) then
+		return true
 	end
 	for _,u in ipairs(OpenPermissions.Operators.Usergroups) do
 		if (OpenPermissions:IsUserGroup(ply, u)) then
@@ -97,14 +116,107 @@ function OpenPermissions:IsOperator(ply)
 	return false
 end
 
---## HasPermission ##--
+--## HasPermission, GetPermission ##--
 
-function OpenPermissions:HasPermission(ply, permission_id)
-	if (OpenPermissions:IsOperator(ply)) then return true end
-
-	if (OpenPermissions.DefaultPermissions[permission_id] == OpenPermissions.CHECKED_CROSSED) then
+function OpenPermissions:GetPermission(ply, permission_id, is_operator)
+	if (type(ply) ~= "Player" or ply:AccountID() == nil) then
+		OpenPermissions:Print("Tried to do a permission check on a non-player or a player without an assigned account ID?", "[ERROR]", OpenPermissions.COLOR_RED)
 		return false
 	end
+	if (ply:IsBot()) then return false end
+	if (is_operator == true or (is_operator ~= false and OpenPermissions:IsOperator(ply))) then return true end
+	
+	local has_permission = OpenPermissions.CHECKBOX.INHERIT
+
+	if (type(permission_id) == "table") then
+		for _,v in ipairs(permission_id) do
+			local r = OpenPermissions:GetPermission(ply, v)
+			if (r ~= OpenPermissions.CHECKBOX.INHERIT) then
+				return r
+			end
+		end
+		return OpenPermissions.CHECKBOX.INHERIT
+	end
+
+	for usergroup in pairs(OpenPermissions:GetUserGroups(ply)) do
+		local ply_usergroup_registry = OpenPermissions.PermissionsRegistry[OpenPermissions.ACCESS_GROUP.USERGROUP .. " " .. usergroup]
+		if (ply_usergroup_registry) then
+			if (ply_usergroup_registry[permission_id] == OpenPermissions.CHECKBOX.TICKED or ply_usergroup_registry[permission_id] == true) then
+				has_permission = OpenPermissions.CHECKBOX.TICKED
+			elseif (ply_usergroup_registry[permission_id] == OpenPermissions.CHECKBOX.CROSSED) then
+				return OpenPermissions.CHECKBOX.CROSSED
+			end
+		end
+	end
+
+	local ply_steamid_registry = OpenPermissions.PermissionsRegistry[OpenPermissions.ACCESS_GROUP.STEAMID .. " " .. ply:AccountID()]
+	if (ply_steamid_registry) then
+		if (ply_steamid_registry[permission_id] == OpenPermissions.CHECKBOX.TICKED or ply_steamid_registry[permission_id] == true) then
+			has_permission = OpenPermissions.CHECKBOX.TICKED
+		elseif (ply_steamid_registry[permission_id] == OpenPermissions.CHECKBOX.CROSSED) then
+			return OpenPermissions.CHECKBOX.CROSSED
+		end
+	end
+
+	if (ply:Team()) then
+		local ply_team_registry = OpenPermissions.PermissionsRegistry[OpenPermissions.ACCESS_GROUP.TEAM .. " " .. OpenPermissions:GetTeamIdentifier(ply:Team())]
+		if (ply_team_registry) then
+			if (ply_team_registry[permission_id] == OpenPermissions.CHECKBOX.TICKED or ply_team_registry[permission_id] == true) then
+				has_permission = OpenPermissions.CHECKBOX.TICKED
+			elseif (ply_team_registry[permission_id] == OpenPermissions.CHECKBOX.CROSSED) then
+				return OpenPermissions.CHECKBOX.CROSSED
+			end
+		end
+
+		if (DarkRP and RPExtraTeams[ply:Team()]) then
+			local ply_category_name = RPExtraTeams[ply:Team()].category
+			local ply_category
+			for i,category in ipairs(DarkRP.getCategories().jobs) do
+				if (category.name == ply_category_name) then
+					ply_category = i
+					break
+				end
+			end
+			if (ply_category) then
+				local ply_category_registry = OpenPermissions.PermissionsRegistry[OpenPermissions.ACCESS_GROUP.DARKRP_CATEGORY .. " " .. OpenPermissions:DarkRP_GetCategoryIdentifier(ply_category)]
+				if (ply_category_registry) then
+					if (ply_category_registry[permission_id] == OpenPermissions.CHECKBOX.TICKED or ply_category_registry[permission_id] == true) then
+						has_permission = OpenPermissions.CHECKBOX.TICKED
+					elseif (ply_category_registry[permission_id] == OpenPermissions.CHECKBOX.CROSSED) then
+						return OpenPermissions.CHECKBOX.CROSSED
+					end
+				end
+			end
+		end
+	end
+
+	for name, func in pairs(OpenPermissions.LuaFunctions) do
+		local lua_function_registry = OpenPermissions.PermissionsRegistry[OpenPermissions.ACCESS_GROUP.LUA_FUNCTION .. " " .. name]
+		if (lua_function_registry) then
+			if (func(ply, permission_id) == true) then
+				if (lua_function_registry[permission_id] == OpenPermissions.CHECKBOX.TICKED or lua_function_registry[permission_id] == true) then
+					has_permission = OpenPermissions.CHECKBOX.TICKED
+				elseif (lua_function_registry[permission_id] == OpenPermissions.CHECKBOX.CROSSED) then
+					return OpenPermissions.CHECKBOX.CROSSED
+				end
+			end
+		end
+	end
+
+	if (has_permission == OpenPermissions.CHECKBOX.INHERIT and OpenPermissions.DefaultPermissions[permission_id] == OpenPermissions.CHECKBOX.TICKED) then
+		has_permission = OpenPermissions.CHECKBOX.TICKED
+	end
+
+	return has_permission
+end
+
+function OpenPermissions:HasPermission(ply, permission_id, is_operator)
+	if (type(ply) ~= "Player" or ply:AccountID() == nil) then
+		OpenPermissions:Print("Tried to do a permission check on a non-player or a player without an assigned account ID?", "[ERROR]", OpenPermissions.COLOR_RED)
+		return false
+	end
+	if (ply:IsBot()) then return false end
+	if (is_operator == true or (is_operator ~= false and OpenPermissions:IsOperator(ply))) then return true end
 
 	local has_permission = false
 
@@ -137,31 +249,33 @@ function OpenPermissions:HasPermission(ply, permission_id)
 		end
 	end
 
-	local ply_team_registry = OpenPermissions.PermissionsRegistry[OpenPermissions.ACCESS_GROUP.TEAM .. " " .. OpenPermissions:GetTeamIdentifier(ply:Team())]
-	if (ply_team_registry) then
-		if (ply_team_registry[permission_id] == OpenPermissions.CHECKBOX.TICKED or ply_team_registry[permission_id] == true) then
-			has_permission = true
-		elseif (ply_team_registry[permission_id] == OpenPermissions.CHECKBOX.CROSSED) then
-			return false
-		end
-	end
-
-	if (DarkRP) then
-		local ply_category_name = RPExtraTeams[ply:Team()].category
-		local ply_category
-		for i,category in ipairs(DarkRP.getCategories().jobs) do
-			if (category.name == ply_category_name) then
-				ply_category = i
-				break
+	if (ply:Team()) then
+		local ply_team_registry = OpenPermissions.PermissionsRegistry[OpenPermissions.ACCESS_GROUP.TEAM .. " " .. OpenPermissions:GetTeamIdentifier(ply:Team())]
+		if (ply_team_registry) then
+			if (ply_team_registry[permission_id] == OpenPermissions.CHECKBOX.TICKED or ply_team_registry[permission_id] == true) then
+				has_permission = true
+			elseif (ply_team_registry[permission_id] == OpenPermissions.CHECKBOX.CROSSED) then
+				return false
 			end
 		end
-		if (ply_category) then
-			local ply_category_registry = OpenPermissions.PermissionsRegistry[OpenPermissions.ACCESS_GROUP.DARKRP_CATEGORY .. " " .. OpenPermissions:DarkRP_GetCategoryIdentifier(ply_category)]
-			if (ply_category_registry) then
-				if (ply_category_registry[permission_id] == OpenPermissions.CHECKBOX.TICKED or ply_category_registry[permission_id] == true) then
-					has_permission = true
-				elseif (ply_category_registry[permission_id] == OpenPermissions.CHECKBOX.CROSSED) then
-					return false
+
+		if (DarkRP and RPExtraTeams[ply:Team()]) then
+			local ply_category_name = RPExtraTeams[ply:Team()].category
+			local ply_category
+			for i,category in ipairs(DarkRP.getCategories().jobs) do
+				if (category.name == ply_category_name) then
+					ply_category = i
+					break
+				end
+			end
+			if (ply_category) then
+				local ply_category_registry = OpenPermissions.PermissionsRegistry[OpenPermissions.ACCESS_GROUP.DARKRP_CATEGORY .. " " .. OpenPermissions:DarkRP_GetCategoryIdentifier(ply_category)]
+				if (ply_category_registry) then
+					if (ply_category_registry[permission_id] == OpenPermissions.CHECKBOX.TICKED or ply_category_registry[permission_id] == true) then
+						has_permission = true
+					elseif (ply_category_registry[permission_id] == OpenPermissions.CHECKBOX.CROSSED) then
+						return false
+					end
 				end
 			end
 		end
@@ -180,7 +294,7 @@ function OpenPermissions:HasPermission(ply, permission_id)
 		end
 	end
 
-	if (has_permission == false and OpenPermissions.DefaultPermissions[permission_id] == OpenPermissions.CHECKED_TICKED) then
+	if (has_permission == false and OpenPermissions.DefaultPermissions[permission_id] == OpenPermissions.CHECKBOX.TICKED) then
 		has_permission = true
 	end
 
@@ -196,7 +310,7 @@ function OpenPermissions:GetTeamIdentifier(team_index)
 		team_identifier_index[team_identifier] = team_index
 		return team_identifier
 	end
-	if (DarkRP) then
+	if (DarkRP and team_index ~= 0) then
 		local team_identifier = RPExtraTeams[team_index].OPENPERMISSIONS_IDENTIFIER or RPExtraTeams[team_index].GAS_IDENTIFIER or RPExtraTeams[team_index].command
 		team_identifier_index[team_identifier] = team_index
 		return team_identifier
@@ -208,6 +322,7 @@ function OpenPermissions:GetTeamIdentifier(team_index)
 end
 
 function OpenPermissions:GetTeamFromIdentifier(team_identifier)
+	if (team_identifier == "Joining/Connecting") then return 0 end
 	if (team_identifier_index[team_identifier]) then return team_identifier_index[team_identifier] end
 
 	local team_index = hook.Run("OpenPermissions:GetTeamFromIdentifier", team_identifier)
@@ -216,8 +331,8 @@ function OpenPermissions:GetTeamFromIdentifier(team_identifier)
 		return team_index
 	end
 	if (DarkRP) then
-		for _,job in pairs(RPExtraTeams) do
-			if (job.OPENPERMISSIONS_IDENTIFIER == team_identifier or job.OPENPERMISSIONS_IDENTIFIER == team_identifier or job.command == team_identifier) then
+		for _,job in ipairs(RPExtraTeams) do
+			if (job.OPENPERMISSIONS_IDENTIFIER == team_identifier or job.command == team_identifier) then
 				team_identifier_index[team_identifier] = job.team
 				return job.team
 			end
@@ -305,10 +420,6 @@ OpenPermissions.ADDON = 0
 OpenPermissions.PERMISSION = 1
 OpenPermissions.CATEGORY = 2
 OpenPermissions.SUBPERMISSION = 3
-
-OpenPermissions.CHECKED_INHERIT = 0
-OpenPermissions.CHECKED_TICKED = 1
-OpenPermissions.CHECKED_CROSSED = 2
 
 --## Networking ##--
 

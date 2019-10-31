@@ -1,3 +1,4 @@
+OpenPermissions_Readying = true
 OpenPermissions_Ready = nil
 
 if (CLIENT and IsValid(OpenPermissions_Menu)) then
@@ -45,12 +46,28 @@ function OpenPermissions:ChatPrint(msg, prefix, color)
 	chat.AddText(color or Color(0,255,255), "[OpenPermissions] " .. (prefix or "") .. " ", Color(255,255,255), msg)
 end
 
+--## BillysErrors ##--
+
+if (file.Exists("includes/modules/billyserrors.lua", "LUA")) then
+	require("billyserrors")
+end
+if (SERVER and BillysErrors) then
+	OpenPermissions.BillysErrors = BillysErrors:AddAddon({
+		Name  = "OpenPermissions",
+		Color = Color(80,0,255),
+		Icon  = "icon16/group.png",
+	})
+end
+
 --## Initialize configs ##--
 OpenPermissions.Operators = {}
 
 local function InstallConfigAddon()
-	GAS:HeaderPrint("Looks like the OpenPermissions Config Addon has not been installed to your server: https://gmodsto.re/openpermissions-config-addon", GAS_PRINT_COLOR_BAD, GAS_PRINT_TYPE_FAIL)
-	if (SERVER) then print("OpenPermissions", "Looks like the OpenPermissions Config Addon has not been installed to your server: https://gmodsto.re/openpermissions-config-addon") end
+	if (SERVER and BillysErrors) then
+		OpenPermissions.BillysErrors:AddMessage("Looks like the OpenPermissions Config Addon has not been installed to your server: ", {Link = "https://gmodsto.re/openpermissions-config-addon"}, "\nYou need to install this addon in order to use & configure OpenPermissions.")
+	else
+		OpenPermissions:Print("Looks like the OpenPermissions Config Addon has not been installed to your server: https://gmodsto.re/openpermissions-config-addon\nYou need to install this addon in order to use & configure OpenPermissions.", "[ERROR]", OpenPermissions.COLOR_RED)
+	end
 end
 
 if (not file.Exists("openpermissions_config.lua", "LUA")) then
@@ -58,7 +75,12 @@ if (not file.Exists("openpermissions_config.lua", "LUA")) then
 else
 	local config_worked = include("openpermissions_config.lua")
 	if (not config_worked) then
-		return OpenPermissions:Print("Your config file appears to have an error! Please fix the errors by looking above or by resetting to the default config.", "[ERROR]", OpenPermissions.COLOR_RED)
+		if (SERVER and BillysErrors) then
+			OpenPermissions.BillysErrors:AddMessage("Your config file appears to have an error! Please fix the errors by looking above or by resetting to the default config.")
+		else
+			OpenPermissions:Print("Your config file appears to have an error! Please fix the errors by looking above or by resetting to the default config.", "[ERROR]", OpenPermissions.COLOR_RED)
+		end
+		return
 	end
 end
 
@@ -67,7 +89,12 @@ if (not file.Exists("openpermissions_lua_functions.lua", "LUA")) then
 else
 	local config_worked = include("openpermissions_lua_functions.lua")
 	if (not config_worked) then
-		return OpenPermissions:Print("Your Lua functions file appears to have an error! Please fix the errors by looking above or by resetting to the default Lua functions config.", "[ERROR]", OpenPermissions.COLOR_RED)
+		if (SERVER and BillysErrors) then
+			OpenPermissions.BillysErrors:AddMessage("Your Lua functions file appears to have an error! Please fix the errors by looking above or by resetting to the default Lua functions config.")
+		else
+			OpenPermissions:Print("Your Lua functions file appears to have an error! Please fix the errors by looking above or by resetting to the default Lua functions config.", "[ERROR]", OpenPermissions.COLOR_RED)
+		end
+		return
 	else
 		OpenPermissions.LuaFunctions = config_worked
 	end
@@ -122,14 +149,17 @@ OpenPermissions.ACCESS_GROUP_KEY = {
 }
 
 OpenPermissions.CHECKBOX = {}
-OpenPermissions.CHECKBOX.NONE = 0
+OpenPermissions.CHECKBOX.INHERIT = 0
 OpenPermissions.CHECKBOX.TICKED = 1
 OpenPermissions.CHECKBOX.CROSSED = 2
 
 --## Add resources ##--
 
-for _,f in ipairs((file.Find("materials/openpermissions/*.vmt", "GAME"))) do
-	resource.AddFile("materials/openpermissions/" .. f)
+if (SERVER) then
+	resource.AddWorkshop("1603635147")
+	for _,f in ipairs((file.Find("materials/openpermissions/*.vmt", "GAME"))) do
+		resource.AddFile("materials/openpermissions/" .. f)
+	end
 end
 
 --## Initialize files ##--
