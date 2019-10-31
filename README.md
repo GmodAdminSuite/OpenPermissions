@@ -6,9 +6,9 @@ OpenPermissions is an open-source library and utility for smoothly, efficiently 
 
 ## Installation
 
-It is not recommended that you install OpenPermissions from its source code.
+Simply download from GitHub and install into your addons folder like usual.
 
-Instead, you should add the [OpenPermissions Workshop addon](https://steamcommunity.com/sharedfiles/filedetails/?id=1595317397) to your server's [Workshop collection](http://wiki.garrysmod.com/page/Workshop_for_Dedicated_Servers).
+Note: GmodAdminSuite comes with OpenPermissions, so you don't need to install OpenPermissions if you already have GmodAdminSuite.
 
 ## Usage
 
