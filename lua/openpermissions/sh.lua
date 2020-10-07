@@ -322,7 +322,9 @@ function OpenPermissions:GetTeamIdentifier(team_index)
 end
 
 function OpenPermissions:GetTeamFromIdentifier(team_identifier)
-	if (team_identifier == "Joining/Connecting") then return 0 end
+	if (team_identifier == "Joining/Connecting") then return TEAM_CONNECTING end
+	if (team_identifier == "Unassigned") then return TEAM_UNASSIGNED end
+	if (team_identifier == "Spectator") then return TEAM_SPECTATOR end
 	if (team_identifier_index[team_identifier]) then return team_identifier_index[team_identifier] end
 
 	local team_index = hook.Run("OpenPermissions:GetTeamFromIdentifier", team_identifier)
