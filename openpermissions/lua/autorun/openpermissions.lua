@@ -162,6 +162,12 @@ if (SERVER) then
 	end
 end
 
+local function IsDarkRPCheck()
+	hook.Remove(SERVER and "PlayerConnect" or "InitPostEntity", "OpenPermissions.IsDarkRP")
+	OpenPermissions.IsDarkRP = DarkRP and DarkRP.getCategories and RPExtraTeams and true
+end
+hook.Add(SERVER and "PlayerConnect" or "InitPostEntity", "OpenPermissions.IsDarkRP", IsDarkRPCheck)
+
 --## Initialize files ##--
 include("openpermissions/sh.lua")
 if (SERVER) then

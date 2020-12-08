@@ -52,15 +52,15 @@ function PANEL:Init()
 	end
 
 	function self.VBar:Think()
-		self.CurrentY = Lerp(0.1, self.CurrentY, self.TargetY)
-		self.btnGrip:SetPos(0, self.CurrentY)
+		self.CurrentY = Lerp(FrameTime() * 10, self.CurrentY, self.TargetY)
+		self.btnGrip:SetPos(0, math.Round(self.CurrentY))
 	end
 
 	self.pnlCanvas.CurrentOffset = 0
 	self.pnlCanvas.TargetOffset = 0
 	function self.pnlCanvas:Think()
-		self.CurrentOffset = Lerp(0.1, self.CurrentOffset, self.TargetOffset)
-		self:SetPos(0, self.CurrentOffset)
+		self.CurrentOffset = Lerp(FrameTime() * 10, self.CurrentOffset, self.TargetOffset)
+		self:SetPos(0, math.Round(self.CurrentOffset))
 	end
 end
 
@@ -68,7 +68,7 @@ function PANEL:OnVScroll(offset)
 	self.pnlCanvas.TargetOffset = offset
 end
 
-function PANEL:PerformLayout()
+function PANEL:PerformLayoutInternal()
 
 	local Tall = self.pnlCanvas:GetTall()
 	local Wide = self:GetWide()

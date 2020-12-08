@@ -4,6 +4,10 @@
 
 OpenPermissions is an open-source library and utility for smoothly, efficiently and easily managing permissions in your GLua addons.
 
+## GmodAdminSuite
+
+DO NOT install this if you have GmodAdminSuite installed to your server -- OpenPermissions should already be installed.
+
 ## Installation
 
 Simply download from GitHub and install into your addons folder like usual.
@@ -18,7 +22,7 @@ You can only access the menu if you have permission to, read below for more info
 
 ## Configuration
 
-OpenPermissions has very minimal configuration, and is configured using an addon which can be [downloaded here](https://github.com/GmodAdminSuite/OpenPermissions-Config).
+OpenPermissions has very minimal configuration, and is configured using the `openpermissions-config` addon.
 
 ## Developers
 

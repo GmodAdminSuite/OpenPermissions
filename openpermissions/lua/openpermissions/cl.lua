@@ -495,7 +495,7 @@ function OpenPermissions:OpenMenu(specific_addon)
 						AddAccessGroup:Add(enum, team.GetName(team_index), val)
 					end
 				elseif (enum == OpenPermissions.ACCESS_GROUP.DARKRP_CATEGORY) then
-					if (DarkRP) then
+					if (OpenPermissions.IsDarkRP) then
 						local category_index = OpenPermissions:DarkRP_GetCategoryFromIdentifier(val)
 						if (category_index) then
 							AddAccessGroup:Add(enum, DarkRP.getCategories().jobs[category_index].name, val)
@@ -562,7 +562,7 @@ function OpenPermissions:OpenMenu(specific_addon)
 
 				local ACCESS_GROUP_TEAM, _ = menu:AddSubMenu(L"ACCESS_GROUP_TEAM") _:SetIcon("icon16/flag_green.png")
 
-					if (DarkRP) then
+					if (OpenPermissions.IsDarkRP) then
 						local categories = {}
 						for i,c in ipairs(DarkRP.getCategories().jobs) do
 							if (GAS:table_IsEmpty(c.members)) then continue end
@@ -610,7 +610,7 @@ function OpenPermissions:OpenMenu(specific_addon)
 						end
 					end
 
-				if (DarkRP) then
+				if (OpenPermissions.IsDarkRP) then
 					local ACCESS_GROUP_DARKRP_CATEGORY, _ = menu:AddSubMenu(L"ACCESS_GROUP_DARKRP_CATEGORY") _:SetIcon("icon16/wrench_orange.png")
 					local darkrp_categories = {}
 					for i,category in ipairs(DarkRP.getCategories().jobs) do

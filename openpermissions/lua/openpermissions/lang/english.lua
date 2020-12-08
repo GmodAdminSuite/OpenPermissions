@@ -31,6 +31,7 @@ return {
 		not_an_addon = "That's not a valid addon.",
 		hold_ctrl_to_select_multiple = "Hold CTRL to multiselect groups",
 		permission_clash_msg = "WARNING: You have selected multiple access groups to copy, only permissions where\nall access groups have the same permission will be copied",
+		Players = "Players",
 
 		ACCESS_GROUP_OTHER = "Other",
 		ACCESS_GROUP_USERGROUP = "Usergroup",

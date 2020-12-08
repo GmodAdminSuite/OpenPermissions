@@ -121,6 +121,7 @@ end
 function OpenPermissions:GetPermission(ply, permission_id, is_operator)
 	if (type(ply) ~= "Player" or ply:AccountID() == nil) then
 		OpenPermissions:Print("Tried to do a permission check on a non-player or a player without an assigned account ID?", "[ERROR]", OpenPermissions.COLOR_RED)
+		debug.Trace()
 		return false
 	end
 	if (ply:IsBot()) then return false end
@@ -168,7 +169,7 @@ function OpenPermissions:GetPermission(ply, permission_id, is_operator)
 			end
 		end
 
-		if (DarkRP and RPExtraTeams[ply:Team()]) then
+		if (OpenPermissions.IsDarkRP and RPExtraTeams[ply:Team()]) then
 			local ply_category_name = RPExtraTeams[ply:Team()].category
 			local ply_category
 			for i,category in ipairs(DarkRP.getCategories().jobs) do
@@ -213,6 +214,7 @@ end
 function OpenPermissions:HasPermission(ply, permission_id, is_operator)
 	if (type(ply) ~= "Player" or ply:AccountID() == nil) then
 		OpenPermissions:Print("Tried to do a permission check on a non-player or a player without an assigned account ID?", "[ERROR]", OpenPermissions.COLOR_RED)
+		debug.Trace()
 		return false
 	end
 	if (ply:IsBot()) then return false end
@@ -259,7 +261,7 @@ function OpenPermissions:HasPermission(ply, permission_id, is_operator)
 			end
 		end
 
-		if (DarkRP and RPExtraTeams[ply:Team()]) then
+		if (OpenPermissions.IsDarkRP and RPExtraTeams[ply:Team()]) then
 			local ply_category_name = RPExtraTeams[ply:Team()].category
 			local ply_category
 			for i,category in ipairs(DarkRP.getCategories().jobs) do
@@ -310,10 +312,12 @@ function OpenPermissions:GetTeamIdentifier(team_index)
 		team_identifier_index[team_identifier] = team_index
 		return team_identifier
 	end
-	if (DarkRP and team_index ~= 0) then
-		local team_identifier = RPExtraTeams[team_index].OPENPERMISSIONS_IDENTIFIER or RPExtraTeams[team_index].GAS_IDENTIFIER or RPExtraTeams[team_index].command
-		team_identifier_index[team_identifier] = team_index
-		return team_identifier
+	if (OpenPermissions.IsDarkRP and RPExtraTeams and team_index ~= 0) then
+		if (RPExtraTeams[team_index]) then
+			local team_identifier = RPExtraTeams[team_index].OPENPERMISSIONS_IDENTIFIER or RPExtraTeams[team_index].GAS_IDENTIFIER or RPExtraTeams[team_index].command
+			team_identifier_index[team_identifier] = team_index
+			return team_identifier
+		end
 	else
 		local team_identifier = team.GetName(team_index)
 		team_identifier_index[team_identifier] = team_index
@@ -332,7 +336,7 @@ function OpenPermissions:GetTeamFromIdentifier(team_identifier)
 		team_identifier_index[team_identifier] = team_index
 		return team_index
 	end
-	if (DarkRP) then
+	if (OpenPermissions.IsDarkRP and RPExtraTeams) then
 		for _,job in ipairs(RPExtraTeams) do
 			if (job.OPENPERMISSIONS_IDENTIFIER == team_identifier or job.command == team_identifier) then
 				team_identifier_index[team_identifier] = job.team
