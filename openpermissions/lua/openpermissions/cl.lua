@@ -231,27 +231,29 @@ function OpenPermissions:OpenMenu(specific_addon)
 						local copied_clashes = false
 						for _,line in ipairs(AccessGroups:GetSelected()) do
 							local identifier = line.Data.Enum .. " " .. line.Data.Value
-							if (not OpenPermissions.PermissionsRegistryEditing[identifier]) then continue end
-							for permission_id, checked in pairs(OpenPermissions.PermissionsRegistryEditing[identifier]) do
-								if (PastePermissions.PermissionsData[permission_id] == nil) then
-									local has_clashed = false
-									for _,line_2 in ipairs(AccessGroups:GetSelected()) do
-										local identifier_2 = line_2.Data.Enum .. " " .. line_2.Data.Value
-										if (not OpenPermissions.PermissionsRegistryEditing[identifier_2]) then continue end
-										if (identifier_2 == identifier) then continue end
-										if (OpenPermissions.PermissionsRegistryEditing[identifier_2][permission_id] ~= checked) then
-											copied_clashes, has_clashed = true, true
-											break
+							if (not OpenPermissions.PermissionsRegistryEditing[line.Data.Enum] or not OpenPermissions.PermissionsRegistryEditing[line.Data.Value]) then continue end
+							for access_group, perms in pairs(OpenPermissions.PermissionsRegistryEditing[line.Data.Enum]) do
+								for permission_id, checked in pairs(perms) do
+									if (PastePermissions.PermissionsData[permission_id] == nil) then
+										local has_clashed = false
+										for _,line_2 in ipairs(AccessGroups:GetSelected()) do
+											local identifier_2 = line_2.Data.Enum .. " " .. line_2.Data.Value
+											if (not OpenPermissions.PermissionsRegistryEditing[line_2.Data.Enum] or not OpenPermissions.PermissionsRegistryEditing[line_2.Data.Value]) then continue end
+											if (identifier_2 == identifier) then continue end
+											if (OpenPermissions.PermissionsRegistryEditing[line_2.Data.Enum][line_2.Data.Value][permission_id] ~= checked) then
+												copied_clashes, has_clashed = true, true
+												break
+											end
 										end
-									end
-									if (not has_clashed) then
-										PastePermissions.PermissionsData[permission_id] = checked
-									else
+										if (not has_clashed) then
+											PastePermissions.PermissionsData[permission_id] = checked
+										else
+											PastePermissions.PermissionsData[permission_id] = nil
+										end
+									elseif (PastePermissions.PermissionsData[permission_id] ~= checked) then
+										copied_clashes = true
 										PastePermissions.PermissionsData[permission_id] = nil
 									end
-								elseif (PastePermissions.PermissionsData[permission_id] ~= checked) then
-									copied_clashes = true
-									PastePermissions.PermissionsData[permission_id] = nil
 								end
 							end
 						end
@@ -261,9 +263,9 @@ function OpenPermissions:OpenMenu(specific_addon)
 					end
 					function PastePermissions:DoClick()
 						for _,line in ipairs(AccessGroups:GetSelected()) do
-							local identifier = line.Data.Enum .. " " .. line.Data.Value
-							OpenPermissions.PermissionsRegistryEditing[identifier] = OpenPermissions.PermissionsRegistryEditing[identifier] or {}
-							table.Merge(OpenPermissions.PermissionsRegistryEditing[identifier], PastePermissions.PermissionsData)
+							OpenPermissions.PermissionsRegistryEditing[line.Data.Enum] = OpenPermissions.PermissionsRegistryEditing[line.Data.Enum] or {}
+							OpenPermissions.PermissionsRegistryEditing[line.Data.Enum][line.Data.Value] = OpenPermissions.PermissionsRegistryEditing[line.Data.Enum][line.Data.Value] or {}
+							table.Merge(OpenPermissions.PermissionsRegistryEditing[line.Data.Enum][line.Data.Value], PastePermissions.PermissionsData)
 						end
 					end
 
@@ -291,23 +293,26 @@ function OpenPermissions:OpenMenu(specific_addon)
 				function PermissionsSave:RememberPermission(permission_id, checked)
 					local is_disabled = true
 					for _,line in ipairs(AccessGroups:GetSelected()) do
-						local identifier = line.Data.Enum .. " " .. line.Data.Value
 						if (checked == OpenPermissions.CHECKBOX.INHERIT or checked == false) then
-							if (OpenPermissions.PermissionsRegistryEditing[identifier] ~= nil) then
-								OpenPermissions.PermissionsRegistryEditing[identifier][permission_id] = nil
-								if (OpenPermissions:table_IsEmpty(OpenPermissions.PermissionsRegistryEditing[identifier])) then
-									OpenPermissions.PermissionsRegistryEditing[identifier] = nil
+							if (OpenPermissions.PermissionsRegistryEditing[line.Data.Enum] ~= nil and OpenPermissions.PermissionsRegistryEditing[line.Data.Enum][line.Data.Value] ~= nil) then
+								OpenPermissions.PermissionsRegistryEditing[line.Data.Enum][line.Data.Value][permission_id] = nil
+								if (OpenPermissions:table_IsEmpty(OpenPermissions.PermissionsRegistryEditing[line.Data.Enum][line.Data.Value])) then
+									OpenPermissions.PermissionsRegistryEditing[line.Data.Enum][line.Data.Value] = nil
+									if (OpenPermissions:table_IsEmpty(OpenPermissions.PermissionsRegistryEditing[line.Data.Enum])) then
+										OpenPermissions.PermissionsRegistryEditing[line.Data.Enum] = nil
+									end
 								end
 							end
 						else
-							OpenPermissions.PermissionsRegistryEditing[identifier] = OpenPermissions.PermissionsRegistryEditing[identifier] or {}
-							OpenPermissions.PermissionsRegistryEditing[identifier][permission_id] = checked
+							OpenPermissions.PermissionsRegistryEditing[line.Data.Enum] = OpenPermissions.PermissionsRegistryEditing[line.Data.Enum] or {}
+							OpenPermissions.PermissionsRegistryEditing[line.Data.Enum][line.Data.Value] = OpenPermissions.PermissionsRegistryEditing[line.Data.Enum][line.Data.Value] or {}
+							OpenPermissions.PermissionsRegistryEditing[line.Data.Enum][line.Data.Value][permission_id] = checked
 						end
 						if (is_disabled) then
-							if ((OpenPermissions.PermissionsRegistryEditing[identifier] ~= nil) ~= (OpenPermissions.PermissionsRegistry[identifier] ~= nil)) then
+							if ((OpenPermissions.PermissionsRegistryEditing[line.Data.Enum] ~= nil and OpenPermissions.PermissionsRegistryEditing[line.Data.Enum][line.Data.Value] ~= nil) ~= (OpenPermissions.PermissionsRegistry[line.Data.Enum] ~= nil and OpenPermissions.PermissionsRegistry[line.Data.Enum][line.Data.Value] ~= nil)) then
 								is_disabled = false
 							else
-								if (OpenPermissions.PermissionsRegistryEditing[identifier] ~= nil and OpenPermissions.PermissionsRegistry[identifier] ~= nil and OpenPermissions.PermissionsRegistryEditing[identifier][permission_id] ~= OpenPermissions.PermissionsRegistry[identifier][permission_id]) then
+								if (OpenPermissions.PermissionsRegistryEditing[line.Data.Enum] ~= nil and OpenPermissions.PermissionsRegistryEditing[line.Data.Enum][line.Data.Value] ~= nil and OpenPermissions.PermissionsRegistry[line.Data.Enum] ~= nil and OpenPermissions.PermissionsRegistry[line.Data.Enum][line.Data.Value] ~= nil and OpenPermissions.PermissionsRegistryEditing[line.Data.Enum][line.Data.Value][permission_id] ~= OpenPermissions.PermissionsRegistry[line.Data.Enum][line.Data.Value][permission_id]) then
 									is_disabled = false
 								elseif (not OpenPermissions:table_IsIdentical(OpenPermissions.PermissionsRegistryEditing, OpenPermissions.PermissionsRegistry)) then
 									is_disabled = false
@@ -320,10 +325,9 @@ function OpenPermissions:OpenMenu(specific_addon)
 				function PermissionsSave:CheckedFromMemory(permission_id, checkbox)
 					local checked
 					for _,line in ipairs(AccessGroups:GetSelected()) do
-						local identifier = line.Data.Enum .. " " .. line.Data.Value
 						local should_be_checked = OpenPermissions.CHECKBOX.INHERIT
-						if (OpenPermissions.PermissionsRegistryEditing[identifier] ~= nil and OpenPermissions.PermissionsRegistryEditing[identifier][permission_id] ~= nil) then
-							should_be_checked = OpenPermissions.PermissionsRegistryEditing[identifier][permission_id]
+						if (OpenPermissions.PermissionsRegistryEditing[line.Data.Enum] ~= nil and OpenPermissions.PermissionsRegistryEditing[line.Data.Enum][line.Data.Value] ~= nil and OpenPermissions.PermissionsRegistryEditing[line.Data.Enum][line.Data.Value][permission_id] ~= nil) then
+							should_be_checked = OpenPermissions.PermissionsRegistryEditing[line.Data.Enum][line.Data.Value][permission_id]
 						elseif (OpenPermissions.DefaultPermissions[permission_id] ~= nil) then
 							should_be_checked = OpenPermissions.DefaultPermissions[permission_id]
 						end
@@ -344,9 +348,11 @@ function OpenPermissions:OpenMenu(specific_addon)
 					self:SetDisabled(true)
 					surface.PlaySound("garrysmod/content_downloaded.wav")
 					
+					OpenPermissions:SerializeRegistry(OpenPermissions.REGISTRY.FLAT_FILE)
 					net.Start("OpenPermissions.SavePermissions")
 						OpenPermissions:StartNetworkTable(OpenPermissions.PermissionsRegistry)
 					net.SendToServer()
+					file.Delete("openpermissions_v2.dat")
 				end
 
 				local AddonBack = vgui.Create("DButton", AddonNav)
@@ -450,8 +456,7 @@ function OpenPermissions:OpenMenu(specific_addon)
 
 			function AddAccessGroup:Add(enum, text, value)
 				local val = value or text
-				local identifier = enum .. " " .. val
-				if (AccessGroups.Data[identifier]) then
+				if (AccessGroups.Data[enum] and AccessGroups.Data[enum][val]) then
 					Derma_Message(L"access_group_exists", L"error", L"ok")
 				else
 					local type
@@ -472,37 +477,30 @@ function OpenPermissions:OpenMenu(specific_addon)
 						surface.SetDrawColor(OpenPermissions.ACCESS_GROUP_KEY[enum])
 						surface.DrawRect(0,0,w,h)
 					end
-					AccessGroups.Data[identifier] = true
+					AccessGroups.Data[enum] = AccessGroups.Data[enum] or {}
+					AccessGroups.Data[enum][val] = true
 				end
 			end
-			for key in pairs(OpenPermissions.PermissionsRegistry) do
-				local enum = ""
-				local val = ""
-				for i=1,#key do
-					if (key[i] == " ") then
-						val = key:sub(i + 1)
-						break
-					else
-						enum = enum .. key[i]
-					end
-				end
-				enum = tonumber(enum)
-				if (enum == OpenPermissions.ACCESS_GROUP.STEAMID) then
-					AddAccessGroup:Add(enum, OpenPermissions:AccountIDToSteamID(tonumber(val)), tonumber(val))
-				elseif (enum == OpenPermissions.ACCESS_GROUP.TEAM) then
-					local team_index = OpenPermissions:GetTeamFromIdentifier(val)
-					if (team_index) then
-						AddAccessGroup:Add(enum, team.GetName(team_index), val)
-					end
-				elseif (enum == OpenPermissions.ACCESS_GROUP.DARKRP_CATEGORY) then
-					if (OpenPermissions.IsDarkRP) then
-						local category_index = OpenPermissions:DarkRP_GetCategoryFromIdentifier(val)
-						if (category_index) then
-							AddAccessGroup:Add(enum, DarkRP.getCategories().jobs[category_index].name, val)
+			for enum, accessors in pairs(OpenPermissions.PermissionsRegistry) do
+				for val, vals in pairs(accessors) do
+					enum = tonumber(enum)
+					if (enum == OpenPermissions.ACCESS_GROUP.STEAMID) then
+						AddAccessGroup:Add(enum, OpenPermissions:AccountIDToSteamID(tonumber(val)), tonumber(val))
+					elseif (enum == OpenPermissions.ACCESS_GROUP.TEAM) then
+						local team_index = OpenPermissions:GetTeamFromIdentifier(val)
+						if (team_index) then
+							AddAccessGroup:Add(enum, team.GetName(team_index), val)
 						end
+					elseif (enum == OpenPermissions.ACCESS_GROUP.DARKRP_CATEGORY) then
+						if (OpenPermissions.IsDarkRP) then
+							local category_index = OpenPermissions:DarkRP_GetCategoryFromIdentifier(val)
+							if (category_index) then
+								AddAccessGroup:Add(enum, DarkRP.getCategories().jobs[category_index].name, val)
+							end
+						end
+					else
+						AddAccessGroup:Add(enum, val)
 					end
-				else
-					AddAccessGroup:Add(enum, val)
 				end
 			end
 
@@ -864,9 +862,12 @@ function OpenPermissions:OpenMenu(specific_addon)
 	function DeleteAccessGroup:DoClick()
 		for i,line in pairs(AccessGroups:GetLines()) do
 			if (not line:IsLineSelected()) then continue end
-			local id = line.Data.Enum .. " " .. line.Data.Value
-			AccessGroups.Data[id] = nil
-			OpenPermissions.PermissionsRegistryEditing[id] = nil
+			if (AccessGroups.Data[line.Data.Enum][line.Data.Value] ~= nil) then
+				AccessGroups.Data[line.Data.Enum][line.Data.Value] = nil
+			end
+			if (OpenPermissions.PermissionsRegistryEditing[line.Data.Enum][line.Data.Value] ~= nil) then
+				OpenPermissions.PermissionsRegistryEditing[line.Data.Enum][line.Data.Value] = nil
+			end
 			AccessGroups:RemoveLine(i)
 		end
 		AddonContent:SetShowOverlay(true)

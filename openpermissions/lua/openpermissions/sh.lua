@@ -1,7 +1,172 @@
-OpenPermissions.pon = include("openpermissions/thirdparty/pon.lua")
+function OpenPermissions:CreatePermissionsRegistry()
+	local registry = {}
+	for _, enum in pairs(OpenPermissions.ACCESS_GROUP) do registry[enum] = {} end
+	return registry
+end
+
+OpenPermissions.REGISTRY = {}
+OpenPermissions.REGISTRY.NETWORKED = 0
+OpenPermissions.REGISTRY.FLAT_FILE = 1
+function OpenPermissions:SerializeRegistry(dataType)
+	if (dataType == OpenPermissions.REGISTRY.NETWORKED) then
+
+		-- Lazy but still probably quicker
+		local data = file.Read("openpermissions_v2.dat", "DATA")
+		net.WriteUInt(#data, 32)
+		net.WriteData(data, #data)
+
+	elseif (dataType == OpenPermissions.REGISTRY.FLAT_FILE) then
+
+		local f = file.Open("openpermissions_v2.dat", "wb", "DATA")
+
+		-- Write file header
+		f:Write("OPENPERMISSIONS")
+
+		local ids = {}
+		local id = 0
+		local ids_pos = f:Tell()
+		f:Seek(ids_pos + (32 / 8)) -- Allocate a UShort for seeker position of IDs
+
+		-- Write permissions registry
+		local access_group_count = 0
+		local access_group_pos = f:Tell()
+		f:Seek(access_group_pos + (32 / 8))
+		for access_group, accessors in pairs(OpenPermissions.PermissionsRegistry) do
+			f:WriteUShort(access_group)
+			access_group_count = access_group_count + 1
+
+			local accessors_count = 0
+			local accessors_pos = f:Tell()
+			f:Seek(accessors_pos + (32 / 8))
+			for accessor, permissions in pairs(accessors) do
+				if (isnumber(accessor)) then
+					f:WriteBool(false)
+					f:WriteULong(accessor)
+				elseif (isstring(accessor)) then
+					f:WriteBool(true)
+					f:WriteUShort(#accessor)
+					f:Write(accessor)
+				else
+					error("Invalid accessor key type! (" .. type(accessor) .. ")")
+				end
+				accessors_count = accessors_count + 1
+
+				local permissions_count = 0
+				local permissions_pos = f:Tell()
+				f:Seek(permissions_pos + (32 / 8))
+				for permission_id, access in pairs(permissions) do
+					if (not ids[permission_id]) then
+						id = id + 1
+						ids[permission_id] = id
+					end
+					f:WriteUShort(ids[permission_id])
+					f:WriteBool(access == OpenPermissions.CHECKBOX.INHERIT)
+					f:WriteBool(access == OpenPermissions.CHECKBOX.CHECKED)
+					permissions_count = permissions_count + 1
+				end
+				local pos = f:Tell()
+				f:Seek(permissions_pos)
+				f:WriteULong(permissions_count)
+				f:Seek(pos)
+			end
+			local pos = f:Tell()
+			f:Seek(accessors_pos)
+			f:WriteULong(accessors_count)
+			f:Seek(pos)
+		end
+		local pos = f:Tell()
+		f:Seek(access_group_pos)
+		f:WriteULong(access_group_count)
+		f:Seek(pos)
+
+		-- Write IDs
+		local count = 0
+		local countPos = f:Tell()
+		f:Seek(countPos + (32 / 8)) -- We can seek back and write the count here
+		for str, id in pairs(ids) do
+			f:WriteUShort(#str)
+			f:Write(str)
+			f:WriteUShort(id)
+			count = count + 1
+		end
+		f:Seek(countPos)
+		f:WriteULong(count)
+
+		f:Seek(ids_pos)
+		f:WriteULong(countPos)
+
+		f:Close()
+
+		file.Write("openpermissions_v2.dat", util.Compress(file.Read("openpermissions_v2.dat", "DATA")))
+
+	end
+end
+function OpenPermissions:DeserializeRegistry(dataType, stream)
+	if (dataType == OpenPermissions.REGISTRY.NETWORKED) then
+		
+		-- Lazy but still probably quicker
+		local data_len = net.ReadUInt(32)
+		local data = net.ReadData(data_len)
+
+		file.Write("openpermissions_networked.dat", data)
+		local deserialized = OpenPermissions:DeserializeRegistry(OpenPermissions.REGISTRY.FLAT_FILE, "openpermissions_networked.dat")
+		file.Delete("openpermissions_networked.dat")
+
+		return deserialized
+
+	elseif (dataType == OpenPermissions.REGISTRY.FLAT_FILE) then
+		
+		local data = file.Read(stream or "openpermissions_v2.dat", "DATA")
+		file.Write("openpermissions_stream.dat", util.Decompress(data))
+		local f = file.Open("openpermissions_stream.dat", "rb", "DATA")
+
+		assert(f:Read(#("OPENPERMISSIONS")) == "OPENPERMISSIONS", "Error! OpenPermissions data corrupted!")
+
+		OpenPermissions.IDs = { Int = {}, Str = {} }
+		OpenPermissions.PermissionsRegistry = OpenPermissions:CreatePermissionsRegistry()
+
+		local ids = {}
+
+		local pointer = f:ReadULong()
+		local pos = f:Tell()
+		f:Seek(pointer)
+
+		-- Read permission IDs
+		for i = 1, f:ReadULong() do
+			local permission_str = f:Read(f:ReadUShort())
+			local permission_id = f:ReadUShort()
+			ids[permission_id] = permission_str
+		end
+		
+		f:Seek(pos)
+
+		-- Read permission registry
+		for i = 1, f:ReadULong() do
+			local access_group = f:ReadUShort()
+			OpenPermissions.PermissionsRegistry[access_group] = {}
+			
+			for j = 1, f:ReadULong() do
+				local accessor = f:ReadBool() and f:Read(f:ReadUShort()) or f:ReadULong()
+				OpenPermissions.PermissionsRegistry[access_group][accessor] = {}
+
+				for k = 1, f:ReadULong() do
+					OpenPermissions.PermissionsRegistry[access_group][accessor][ids[f:ReadUShort()]] = f:ReadBool() and OpenPermissions.CHECKBOX.INHERIT or (f:ReadBool() and OpenPermissions.CHECKBOX.CHECKED or OpenPermissions.CHECKBOX.CROSSED)
+				end
+			end
+		end
+
+		f:Close()
+		file.Delete("openpermissions_stream.dat")
+
+		return OpenPermissions.PermissionsRegistry
+
+	end
+end
+
 function OpenPermissions:SerializeTable(tbl)
 	return OpenPermissions.pon.encode(tbl)
 end
+
 function OpenPermissions:DeserializeTable(tbl)
 	return OpenPermissions.pon.decode(tbl)
 end
@@ -11,6 +176,10 @@ function OpenPermissions:ClearNetworkCache(tbl)
 	NetworkedTblCache[tostring(tbl)] = nil
 end
 function OpenPermissions:StartNetworkTable(tbl, cache, clear_cache)
+	if (tbl == OpenPermissions.PermissionsRegistry) then
+		return OpenPermissions:SerializeRegistry(OpenPermissions.REGISTRY.NETWORKED)
+	end
+
 	local tbl_enc
 	if (cache and not clear_cache and NetworkedTblCache[tostring(tbl)] ~= nil) then
 		tbl_enc = NetworkedTblCache[tostring(tbl)]
@@ -20,11 +189,11 @@ function OpenPermissions:StartNetworkTable(tbl, cache, clear_cache)
 			NetworkedTblCache[tostring(tbl)] = tbl_enc
 		end
 	end
-	net.WriteUInt(#tbl_enc, 16)
+	net.WriteUInt(#tbl_enc, 32)
 	net.WriteData(tbl_enc, #tbl_enc)
 end
 function OpenPermissions:ReceiveNetworkTable()
-	local tbl_enc_len = net.ReadUInt(16)
+	local tbl_enc_len = net.ReadUInt(32)
 	local tbl_dec = OpenPermissions:DeserializeTable(util.Decompress(net.ReadData(tbl_enc_len)))
 	return tbl_dec
 end
@@ -140,7 +309,7 @@ function OpenPermissions:GetPermission(ply, permission_id, is_operator)
 	end
 
 	for usergroup in pairs(OpenPermissions:GetUserGroups(ply)) do
-		local ply_usergroup_registry = OpenPermissions.PermissionsRegistry[OpenPermissions.ACCESS_GROUP.USERGROUP .. " " .. usergroup]
+		local ply_usergroup_registry = OpenPermissions.PermissionsRegistry[OpenPermissions.ACCESS_GROUP.USERGROUP][usergroup]
 		if (ply_usergroup_registry) then
 			if (ply_usergroup_registry[permission_id] == OpenPermissions.CHECKBOX.TICKED or ply_usergroup_registry[permission_id] == true) then
 				has_permission = OpenPermissions.CHECKBOX.TICKED
@@ -150,7 +319,7 @@ function OpenPermissions:GetPermission(ply, permission_id, is_operator)
 		end
 	end
 
-	local ply_steamid_registry = OpenPermissions.PermissionsRegistry[OpenPermissions.ACCESS_GROUP.STEAMID .. " " .. ply:AccountID()]
+	local ply_steamid_registry = OpenPermissions.PermissionsRegistry[OpenPermissions.ACCESS_GROUP.STEAMID][ply:AccountID()]
 	if (ply_steamid_registry) then
 		if (ply_steamid_registry[permission_id] == OpenPermissions.CHECKBOX.TICKED or ply_steamid_registry[permission_id] == true) then
 			has_permission = OpenPermissions.CHECKBOX.TICKED
@@ -160,7 +329,7 @@ function OpenPermissions:GetPermission(ply, permission_id, is_operator)
 	end
 
 	if (ply:Team()) then
-		local ply_team_registry = OpenPermissions.PermissionsRegistry[OpenPermissions.ACCESS_GROUP.TEAM .. " " .. OpenPermissions:GetTeamIdentifier(ply:Team())]
+		local ply_team_registry = OpenPermissions.PermissionsRegistry[OpenPermissions.ACCESS_GROUP.TEAM][OpenPermissions:GetTeamIdentifier(ply:Team())]
 		if (ply_team_registry) then
 			if (ply_team_registry[permission_id] == OpenPermissions.CHECKBOX.TICKED or ply_team_registry[permission_id] == true) then
 				has_permission = OpenPermissions.CHECKBOX.TICKED
@@ -179,7 +348,7 @@ function OpenPermissions:GetPermission(ply, permission_id, is_operator)
 				end
 			end
 			if (ply_category) then
-				local ply_category_registry = OpenPermissions.PermissionsRegistry[OpenPermissions.ACCESS_GROUP.DARKRP_CATEGORY .. " " .. OpenPermissions:DarkRP_GetCategoryIdentifier(ply_category)]
+				local ply_category_registry = OpenPermissions.PermissionsRegistry[OpenPermissions.ACCESS_GROUP.DARKRP_CATEGORY][OpenPermissions:DarkRP_GetCategoryIdentifier(ply_category)]
 				if (ply_category_registry) then
 					if (ply_category_registry[permission_id] == OpenPermissions.CHECKBOX.TICKED or ply_category_registry[permission_id] == true) then
 						has_permission = OpenPermissions.CHECKBOX.TICKED
@@ -192,7 +361,7 @@ function OpenPermissions:GetPermission(ply, permission_id, is_operator)
 	end
 
 	for name, func in pairs(OpenPermissions.LuaFunctions) do
-		local lua_function_registry = OpenPermissions.PermissionsRegistry[OpenPermissions.ACCESS_GROUP.LUA_FUNCTION .. " " .. name]
+		local lua_function_registry = OpenPermissions.PermissionsRegistry[OpenPermissions.ACCESS_GROUP.LUA_FUNCTION][name]
 		if (lua_function_registry) then
 			if (func(ply, permission_id) == true) then
 				if (lua_function_registry[permission_id] == OpenPermissions.CHECKBOX.TICKED or lua_function_registry[permission_id] == true) then
@@ -232,7 +401,7 @@ function OpenPermissions:HasPermission(ply, permission_id, is_operator)
 	end
 
 	for usergroup in pairs(OpenPermissions:GetUserGroups(ply)) do
-		local ply_usergroup_registry = OpenPermissions.PermissionsRegistry[OpenPermissions.ACCESS_GROUP.USERGROUP .. " " .. usergroup]
+		local ply_usergroup_registry = OpenPermissions.PermissionsRegistry[OpenPermissions.ACCESS_GROUP.USERGROUP][usergroup]
 		if (ply_usergroup_registry) then
 			if (ply_usergroup_registry[permission_id] == OpenPermissions.CHECKBOX.TICKED or ply_usergroup_registry[permission_id] == true) then
 				has_permission = true
@@ -242,7 +411,7 @@ function OpenPermissions:HasPermission(ply, permission_id, is_operator)
 		end
 	end
 
-	local ply_steamid_registry = OpenPermissions.PermissionsRegistry[OpenPermissions.ACCESS_GROUP.STEAMID .. " " .. ply:AccountID()]
+	local ply_steamid_registry = OpenPermissions.PermissionsRegistry[OpenPermissions.ACCESS_GROUP.STEAMID][ply:AccountID()]
 	if (ply_steamid_registry) then
 		if (ply_steamid_registry[permission_id] == OpenPermissions.CHECKBOX.TICKED or ply_steamid_registry[permission_id] == true) then
 			has_permission = true
@@ -252,7 +421,7 @@ function OpenPermissions:HasPermission(ply, permission_id, is_operator)
 	end
 
 	if (ply:Team()) then
-		local ply_team_registry = OpenPermissions.PermissionsRegistry[OpenPermissions.ACCESS_GROUP.TEAM .. " " .. OpenPermissions:GetTeamIdentifier(ply:Team())]
+		local ply_team_registry = OpenPermissions.PermissionsRegistry[OpenPermissions.ACCESS_GROUP.TEAM][OpenPermissions:GetTeamIdentifier(ply:Team())]
 		if (ply_team_registry) then
 			if (ply_team_registry[permission_id] == OpenPermissions.CHECKBOX.TICKED or ply_team_registry[permission_id] == true) then
 				has_permission = true
@@ -271,7 +440,7 @@ function OpenPermissions:HasPermission(ply, permission_id, is_operator)
 				end
 			end
 			if (ply_category) then
-				local ply_category_registry = OpenPermissions.PermissionsRegistry[OpenPermissions.ACCESS_GROUP.DARKRP_CATEGORY .. " " .. OpenPermissions:DarkRP_GetCategoryIdentifier(ply_category)]
+				local ply_category_registry = OpenPermissions.PermissionsRegistry[OpenPermissions.ACCESS_GROUP.DARKRP_CATEGORY][OpenPermissions:DarkRP_GetCategoryIdentifier(ply_category)]
 				if (ply_category_registry) then
 					if (ply_category_registry[permission_id] == OpenPermissions.CHECKBOX.TICKED or ply_category_registry[permission_id] == true) then
 						has_permission = true
@@ -284,7 +453,7 @@ function OpenPermissions:HasPermission(ply, permission_id, is_operator)
 	end
 
 	for name, func in pairs(OpenPermissions.LuaFunctions) do
-		local lua_function_registry = OpenPermissions.PermissionsRegistry[OpenPermissions.ACCESS_GROUP.LUA_FUNCTION .. " " .. name]
+		local lua_function_registry = OpenPermissions.PermissionsRegistry[OpenPermissions.ACCESS_GROUP.LUA_FUNCTION][name]
 		if (lua_function_registry) then
 			if (func(ply, permission_id) == true) then
 				if (lua_function_registry[permission_id] == OpenPermissions.CHECKBOX.TICKED or lua_function_registry[permission_id] == true) then
@@ -427,11 +596,13 @@ OpenPermissions.PERMISSION = 1
 OpenPermissions.CATEGORY = 2
 OpenPermissions.SUBPERMISSION = 3
 
+OpenPermissions.PermissionsRegistry = OpenPermissions:CreatePermissionsRegistry()
+OpenPermissions.DefaultPermissions = {}
+
 --## Networking ##--
 
-OpenPermissions.PermissionsRegistry = {}
-OpenPermissions.DefaultPermissions = {}
 if (SERVER) then
+	-- Convert old file format to new
 	if (file.Exists("openpermissions.dat", "DATA")) then
 		local read_file = file.Read("openpermissions.dat", "DATA")
 		if (not read_file) then
@@ -441,23 +612,47 @@ if (SERVER) then
 			if (not read_file) then
 				OpenPermissions:Print("Failed to decompress saved permissions data", "[ERROR]", OpenPermissions.COLOR_RED)
 			else
-				local no_errors, deserialized = pcall(function()
-					return OpenPermissions:DeserializeTable(read_file)
-				end)
+				local no_errors, deserialized = pcall(OpenPermissions.pon.decode, read_file)
 				if (not no_errors) then
 					OpenPermissions:Print("Failed to deserialize decompressed saved permissions data", "[ERROR]", OpenPermissions.COLOR_RED)
 				else
-					OpenPermissions:Print("Saved permissions data successfully loaded", "[INFO]", OpenPermissions.COLOR_GREEN)
-					OpenPermissions.PermissionsRegistry = deserialized
+					--OpenPermissions:Print("Saved permissions data successfully loaded", "[INFO]", OpenPermissions.COLOR_GREEN)
+
+					-- Restructure
+					for access_group_str, permissions in pairs(deserialized) do
+						local access_group, accessor = access_group_str:match("(%d) (.+)")
+						OpenPermissions.PermissionsRegistry[access_group] = OpenPermissions.PermissionsRegistry[access_group] or {}
+						OpenPermissions.PermissionsRegistry[access_group][accessor] = {}
+						for permission_id_str, permission in pairs(permissions) do
+							OpenPermissions.PermissionsRegistry[access_group][accessor][permission_id_str] = permission
+						end
+					end
+
+					-- Save new data
+					OpenPermissions:SerializeRegistry(OpenPermissions.REGISTRY.FLAT_FILE)
+
+					file.Rename("openpermissions.dat", "openpermissions_v1.dat")
 				end
 			end
 		end
 	end
+
+	if (file.Exists("openpermissions_v2.dat", "DATA")) then
+		local no_errors = xpcall(OpenPermissions.DeserializeRegistry, function(err)
+			OpenPermissions:Print("Failed to deserialize decompressed saved permissions data", "[ERROR]", OpenPermissions.COLOR_RED)
+
+			print(err)
+			debug.Trace()
+		end, OpenPermissions, OpenPermissions.REGISTRY.FLAT_FILE)
+
+		if (no_errors) then
+			OpenPermissions:Print("Saved permissions data successfully loaded", "[INFO]", OpenPermissions.COLOR_GREEN)
+		end
+	end
 	net.Receive("OpenPermissions.SavePermissions", function(_, ply)
 		if (not OpenPermissions:IsOperator(ply)) then return end
-		OpenPermissions.PermissionsRegistry = OpenPermissions:ReceiveNetworkTable()
-		
-		file.Write("openpermissions.dat", util.Compress(OpenPermissions:SerializeTable(OpenPermissions.PermissionsRegistry)))
+		OpenPermissions:DeserializeRegistry(OpenPermissions.REGISTRY.NETWORKED)
+		OpenPermissions:SerializeRegistry(OpenPermissions.REGISTRY.FLAT_FILE)
 
 		net.Start("OpenPermissions.PermissionsRegistry")
 			OpenPermissions:StartNetworkTable(OpenPermissions.PermissionsRegistry, true, true)
@@ -472,7 +667,7 @@ if (SERVER) then
 	end)
 else
 	net.Receive("OpenPermissions.PermissionsRegistry", function()
-		OpenPermissions.PermissionsRegistry = OpenPermissions:ReceiveNetworkTable()
+		OpenPermissions:DeserializeRegistry(OpenPermissions.REGISTRY.NETWORKED)
 		OpenPermissions.DefaultPermissions = OpenPermissions:ReceiveNetworkTable()
 		OpenPermissions:Print("Received permissions registry", "[INFO]")
 	end)

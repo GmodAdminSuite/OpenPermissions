@@ -140,9 +140,6 @@ function OpenPermissions:RegisterAddon(id, options)
 	OpenPermissions.Addons[id] = new_addon
 	OpenPermissions.NetworkedAddons[id] = {{}, options}
 
-	OpenPermissions:ClearNetworkCache(OpenPermissions.PermissionsRegistry)
-	OpenPermissions:ClearNetworkCache(OpenPermissions.DefaultPermissions)
-
 	return new_addon
 end
 

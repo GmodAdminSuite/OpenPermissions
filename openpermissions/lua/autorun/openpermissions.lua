@@ -6,6 +6,8 @@ if (CLIENT and IsValid(OpenPermissions_Menu)) then
 end
 
 OpenPermissions = {}
+OpenPermissions.pon = include("openpermissions/thirdparty/pon.lua")
+
 OpenPermissions.Version = "v1.0"
 
 OpenPermissions.COLOR_WHITE      = Color(255,255,255)
@@ -117,7 +119,7 @@ if (CLIENT) then
 		local selected_language = file.Read("openpermissions_lang.txt", "DATA")
 		if (not selected_language or not file.Find("openpermissions/lang/" .. selected_language .. ".lua", "LUA")) then selected_language = "english" end
 		OpenPermissions.LANG_ENGLISH = include("openpermissions/lang/english.lua")
-		if (selected_language == "english") then
+		if (selected_language == "english" or not file.Exists("openpermissions/lang/" .. selected_language .. ".lua", "LUA")) then
 			OpenPermissions.LANG = OpenPermissions.LANG_ENGLISH or {}
 		else
 			OpenPermissions.LANG = include("openpermissions/lang/" .. selected_language .. ".lua") or {}
