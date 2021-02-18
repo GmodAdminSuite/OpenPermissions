@@ -110,15 +110,13 @@ function OpenPermissions:DeserializeRegistry(dataType, stream)
 		
 		-- Lazy but still probably quicker
 		local data_len = net.ReadUInt(32)
-		if (data_len == 0) then return {} end
+		if (data_len == 0) then return end
 
 		local data = net.ReadData(data_len)
 
 		file.Write("openpermissions_networked.dat", data)
-		local deserialized = OpenPermissions:DeserializeRegistry(OpenPermissions.REGISTRY.FLAT_FILE, "openpermissions_networked.dat")
+		OpenPermissions:DeserializeRegistry(OpenPermissions.REGISTRY.FLAT_FILE, "openpermissions_networked.dat")
 		file.Delete("openpermissions_networked.dat")
-
-		return deserialized
 
 	elseif (dataType == OpenPermissions.REGISTRY.FLAT_FILE) then
 		
