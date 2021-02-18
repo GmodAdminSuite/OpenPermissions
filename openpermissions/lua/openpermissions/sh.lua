@@ -10,10 +10,14 @@ OpenPermissions.REGISTRY.FLAT_FILE = 1
 function OpenPermissions:SerializeRegistry(dataType)
 	if (dataType == OpenPermissions.REGISTRY.NETWORKED) then
 
-		-- Lazy but still probably quicker
-		local data = file.Read("openpermissions_v2.dat", "DATA")
-		net.WriteUInt(#data, 32)
-		net.WriteData(data, #data)
+		if (file.Exists("openpermissions_v2.dat", "DATA")) then
+			-- Lazy but still probably quicker
+			local data = file.Read("openpermissions_v2.dat", "DATA")
+			net.WriteUInt(#data, 32)
+			net.WriteData(data, #data)
+		else
+			net.WriteUInt(0, 32)
+		end
 
 	elseif (dataType == OpenPermissions.REGISTRY.FLAT_FILE) then
 
@@ -61,7 +65,7 @@ function OpenPermissions:SerializeRegistry(dataType)
 					end
 					f:WriteUShort(ids[permission_id])
 					f:WriteBool(access == OpenPermissions.CHECKBOX.INHERIT)
-					f:WriteBool(access == OpenPermissions.CHECKBOX.CHECKED)
+					f:WriteBool(access == OpenPermissions.CHECKBOX.TICKED)
 					permissions_count = permissions_count + 1
 				end
 				local pos = f:Tell()
@@ -106,6 +110,8 @@ function OpenPermissions:DeserializeRegistry(dataType, stream)
 		
 		-- Lazy but still probably quicker
 		local data_len = net.ReadUInt(32)
+		if (data_len == 0) then return {} end
+
 		local data = net.ReadData(data_len)
 
 		file.Write("openpermissions_networked.dat", data)
@@ -150,7 +156,7 @@ function OpenPermissions:DeserializeRegistry(dataType, stream)
 				OpenPermissions.PermissionsRegistry[access_group][accessor] = {}
 
 				for k = 1, f:ReadULong() do
-					OpenPermissions.PermissionsRegistry[access_group][accessor][ids[f:ReadUShort()]] = f:ReadBool() and OpenPermissions.CHECKBOX.INHERIT or (f:ReadBool() and OpenPermissions.CHECKBOX.CHECKED or OpenPermissions.CHECKBOX.CROSSED)
+					OpenPermissions.PermissionsRegistry[access_group][accessor][ids[f:ReadUShort()]] = f:ReadBool() and OpenPermissions.CHECKBOX.INHERIT or (f:ReadBool() and OpenPermissions.CHECKBOX.TICKED or OpenPermissions.CHECKBOX.CROSSED)
 				end
 			end
 		end
@@ -603,7 +609,7 @@ OpenPermissions.DefaultPermissions = {}
 
 if (SERVER) then
 	-- Convert old file format to new
-	if (file.Exists("openpermissions.dat", "DATA")) then
+	if (file.Exists("openpermissions.dat", "DATA") and not file.Exists("openpermissions_v2.dat", "DATA")) then
 		local read_file = file.Read("openpermissions.dat", "DATA")
 		if (not read_file) then
 			OpenPermissions:Print("Failed to read saved permissions data", "[ERROR]", OpenPermissions.COLOR_RED)
